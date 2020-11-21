@@ -8,9 +8,13 @@ Vue.config.productionTip = false;
 
 import "bootstrap/dist/css/bootstrap.css";
 import "bootstrap-vue/dist/bootstrap-vue.css";
+import Http from "./services/http.service";
 
 Vue.use(BootstrapVue);
 Vue.use(BootstrapVueIcons);
+
+Vue.prototype.$http = new Http();
+Vue.prototype.$httpauth = new Http({auth: true});
 
 new Vue({
   router,
