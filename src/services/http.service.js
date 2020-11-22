@@ -35,19 +35,28 @@ export default class Http {
             //some conds
             return response;
         },
-        error => {
-            let alertMessage = '';
-            if (error.response) {
-                alertMessage = error.response.data.message;
-            }
-            else {
-                alertMessage = error.message;
-            }
-            window.alert(alertMessage);
+            error => {
+                let alertMessage = '';
+                if (error.response) {
+                    alertMessage = error.response.data.message;
+                    if (error.response.data.resultCode === -2) {
+                        let valErrMesage = `${alertMessage}\n `;
+                        error.response.data.validationErrors.forEach(element => {
+                            valErrMesage += `${element.message} \n`
+                        });
+                        window.alert(valErrMesage);
+                    }
+                }
+                else {
+                    alertMessage = error.message;
+                }
+                window.console.log(error);
+                window.console.log(error.response);
+                window.console.log(alertMessage);
 
-            return Promise.reject(error);
-        });
-        
+                return Promise.reject(error);
+            });
+
         return this.instance;
     }
 }
