@@ -15,7 +15,7 @@
 						<b-form-select
 							v-model="fromCity"
 							id="sortBySelect"
-							:options="cities"
+							:options="filteredCities('toCity')"
 							class="w-75"
 							value-field="id"
 							text-field="name"
@@ -38,7 +38,7 @@
 						v-model="toCity"
 						id="initialSortSelect"
 						size="sm"
-						:options="cities"
+						:options="filteredCities('fromCity')"
 						value-field="id"
 						text-field="name"
 					></b-form-select>
@@ -325,6 +325,12 @@ export default {
 		this.totalRows = this.flights.length;
 	},
 	methods: {
+		filteredCities(from) {
+			if (this[from]) {
+				return this.cities.filter((c) => c.id !== this[from]);
+			}
+			return this.cities;
+		},
 		info(item, index, button) {
 			this.infoModal.title = `Edit: ${index}`;
 			this.infoModal.content = JSON.stringify(item, null, 2);
@@ -355,6 +361,7 @@ export default {
 			try {
 				let response = await this.$http.get(`/api/dict/cities`);
 				this.cities = response.data.data;
+				this.cities.unshift({id: 0, name: ''});
 			} catch (error) {
 				window.console.error(error);
 			}
@@ -392,7 +399,6 @@ export default {
 
 		async createFlight() {
 			this.$root.$emit("create");
-			console.log("emitted");
 			await this.getFiltered();
 		},
 
@@ -400,18 +406,15 @@ export default {
 			let query = ``;
 			query += this.fromCity ? `From=${this.fromCity}` : ``;
 			query += this.toCity ? `&To=${this.toCity}` : ``;
-			console.log(`departureDate`, this.departureDate);
 			if (this.departureDate) {
 				let from = this.replaceDatePart(
 					this.getDateTimeString(this.rangeDeprtureValue[0]),
 					this.departureDate
 				);
-				console.log('from', from);
 				let until = this.replaceDatePart(
 					this.getDateTimeString(this.rangeDeprtureValue[1]),
 					this.departureDate
 				);
-				console.log('until', until);
 				query += `&DepartureTimeFrom=${from}`;
 				query += `&DepartureTimeUntil=${until}`;
 			}
@@ -434,8 +437,6 @@ export default {
 			);
 		},
 		replaceDatePart(date, replacement) {
-			console.log("date", date);
-			console.log("replacement", replacement);
 			return "" + replacement + date.substr(replacement.length);
 		},
 	},
@@ -447,29 +448,14 @@ export default {
 			await this.getFiltered();
 		},
 		departureDate: async function () {
-			// console.log(value);
-			// let from = this.replaceDatePart(
-			// 	this.getDateTimeString(this.rangeDeprtureValue[0]),
-			// 	this.departureDate
-			// );
-			// let until = this.replaceDatePart(
-			// 	this.getDateTimeString(this.rangeDeprtureValue[1]),
-			// 	this.departureDate
-			// );
-			// console.log("from", from);
-			// console.log("until", until);
 			await this.getFiltered();
 		},
-		// rangeDeprtureValue: async function () {
-		// 	await this.getFiltered();
-		// },
 	},
 	async created() {
 		await this.getCities();
 		// await this.getFlights();
 		await this.getFiltered();
 		this.totalRows = this.flights.length;
-		console.log(this.roles);
 		let vm = this;
 		this.$root.$on("refresh-flights", async function (reason) {
 			await vm.getFiltered(reason);
