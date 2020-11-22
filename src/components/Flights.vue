@@ -45,31 +45,6 @@
 				</b-form-group>
 			</b-col>
 
-			<!-- <b-col lg="6" class="my-1">
-				<b-form-group
-					label="Filter"
-					label-cols-sm="3"
-					label-align-sm="right"
-					label-size="sm"
-					label-for="filterInput"
-					class="mb-0"
-				>
-					<b-input-group size="sm">
-						<b-form-input
-							v-model="filter"
-							type="search"
-							id="filterInput"
-							placeholder="Type to Search"
-						></b-form-input>
-						<b-input-group-append>
-							<b-button :disabled="!filter" @click="filter = ''"
-								>Clear</b-button
-							>
-						</b-input-group-append>
-					</b-input-group>
-				</b-form-group>
-			</b-col> -->
-
 			<b-col lg="6" class="mt-5 my-1">
 				<b-form-group
 					label="Departure date"
@@ -96,44 +71,33 @@
 					label-for="filterInput"
 					class="mt-0"
 				>
-					<vue-range-slider
-						class="mt-1"
+					<vue-slider
+						class="mt-1 mr-5"
 						v-model="rangeDeprtureValue"
+						:enable-cross="enableCross"
 						:min="min"
 						:max="max"
-						:step="step"
-						:enable-cross="enableCross"
-						:tooltip-merge="true"
-						:merge-formatter="mergeFormatString"
-						:formatter="getTimeString"
-					>
-					</vue-range-slider>
+						:min-range="minRange"
+						:tooltip="'always'"
+						:interval="step"
+						:tooltip-formatter="getTimeString"
+						:tooltip-placement="['top', 'bottom']"
+						@change="getFiltered"
+					></vue-slider>
 				</b-form-group>
 			</b-col>
-			<!-- <b-col lg="6" class="mt-5 my-1 ml-n4">
-				<b-form-group
-					label="Arrival time"
-					label-cols-sm="3"
-					label-align-sm="right"
-					label-size="sm"
-					label-for="filterInput"
-					class="mt-0"
-				>
-					<vue-range-slider
-						v-model="rangeArrivalValue"
-						:min="min"
-						:max="max"
-						:step="step"
-						:enable-cross="enableCross"
-						:tooltip-merge="true"
-						:merge-formatter="mergeFormatString"
-						:formatter="getTimeString"
-					>
-					</vue-range-slider>
-				</b-form-group>
-			</b-col> -->
 		</b-row>
-
+		<b-row align-h="start">
+			<b-col lg="1" class="my-1 pr-5">
+				<b-button
+					v-if="isAdmin"
+					size="md"
+					@click="openCreateModal($event.target)"
+				>
+					Create
+				</b-button>
+			</b-col>
+		</b-row>
 		<!-- Main table element -->
 		<b-table
 			show-empty
@@ -155,25 +119,38 @@
 			</template> -->
 
 			<template #cell(actions)="row">
-				<b-button
+				<!-- <b-button
 					size="sm"
 					@click="info(row.item, row.index, $event.target)"
 					class="mr-1"
 				>
-					Info modal
+					Edit
+				</b-button> -->
+				<b-button
+					v-if="isAdmin"
+					size="sm"
+					@click="goToEdit(row.item, row.item.id, $event.target)"
+					class="mr-1"
+				>
+					Edit
 				</b-button>
-				<b-button size="sm" @click="row.toggleDetails">
-					{{ row.detailsShowing ? "Hide" : "Show" }} Details
+				<b-button
+					v-if="isAdmin || isModerator"
+					size="sm"
+					@click="row.toggleDetails"
+				>
+					Change delay
 				</b-button>
 			</template>
 
 			<template #row-details="row">
 				<b-card>
-					<ul>
+					<set-delay :flight="row.item" @hide="row.toggleDetails" />
+					<!-- <ul>
 						<li v-for="(value, key) in row.item" :key="key">
 							{{ key }}: {{ value }}
 						</li>
-					</ul>
+					</ul> -->
 				</b-card>
 			</template>
 		</b-table>
@@ -216,21 +193,38 @@
 			:id="infoModal.id"
 			:title="infoModal.title"
 			ok-only
+			@ok="save(infoModal.content.id)"
 			@hide="resetInfoModal"
 		>
-			<pre>{{ infoModal.content }}</pre>
+			<edit v-if="infoModal.content" :flight="infoModal.content" />
+			<!-- <pre>{{ infoModal.content }}</pre> -->
+		</b-modal>
+		<b-modal id="modalCreate" title="Create" ok-only @ok="createFlight()">
+			<create />
+			<!-- <pre>{{ infoModal.content }}</pre> -->
 		</b-modal>
 	</b-container>
 </template>
 
 <script>
-import "vue-range-component/dist/vue-range-slider.css";
-import VueRangeSlider from "vue-range-component";
+import VueSlider from "vue-slider-component";
+import "vue-slider-component/theme/default.css";
+import roles from "../mixins/roles.mixin";
+
+import * as dateHelper from "../helpers/date.helper";
+
+import SetDelay from "./SetDelay";
+import Edit from "./Edit";
+import Create from "./Create";
 
 export default {
 	components: {
-		VueRangeSlider,
+		VueSlider,
+		SetDelay,
+		Edit,
+		Create,
 	},
+	mixins: [roles],
 	data() {
 		return {
 			fields: [
@@ -284,7 +278,7 @@ export default {
 			],
 			totalRows: 1,
 			currentPage: 1,
-			perPage: 5,
+			perPage: 10,
 			pageOptions: [5, 10, 15, { value: 100, text: "Show a lot" }],
 			sortBy: "",
 			sortDesc: false,
@@ -303,14 +297,17 @@ export default {
 			toCity: null,
 			flights: [],
 
-			rangeDeprtureValue: [0, 24 * 60],
+			rangeDeprtureValue: [0, 24 * 60 - 1],
 			rangeArrivalValue: [0, 24 * 60],
 			min: 0,
-			max: 24 * 60,
-			step: 15,
+			max: 1439,
+			minRange: 30,
+			step: 1,
 			enableCross: false,
 
-			departureDate: null,
+			departureDate: dateHelper.curOnlyDateTemplate(),
+
+			forEdit: null,
 		};
 	},
 	computed: {
@@ -329,18 +326,28 @@ export default {
 	},
 	methods: {
 		info(item, index, button) {
-			this.infoModal.title = `Row index: ${index}`;
+			this.infoModal.title = `Edit: ${index}`;
 			this.infoModal.content = JSON.stringify(item, null, 2);
 			this.$root.$emit("bv::show::modal", this.infoModal.id, button);
 		},
 		resetInfoModal() {
 			this.infoModal.title = "";
-			this.infoModal.content = "";
+			this.infoModal.content = null;
 		},
 		onFiltered(filteredItems) {
 			// Trigger pagination to update the number of buttons/pages due to filtering
 			this.totalRows = filteredItems.length;
 			this.currentPage = 1;
+		},
+
+		goToEdit(item, index, button) {
+			this.infoModal.title = `Row index: ${index}`;
+			this.infoModal.content = item;
+			this.$root.$emit("bv::show::modal", this.infoModal.id, button);
+		},
+
+		openCreateModal(button) {
+			this.$root.$emit("bv::show::modal", "modalCreate", button);
 		},
 
 		//---------
@@ -363,23 +370,110 @@ export default {
 		getTimeString(value) {
 			// return new Date(`0001-01-01T${value < 10 ? `0${value}` : value }:00:00`).toLocaleTimeString();
 
+			return new Date(this.getDateTimeString(value)).toLocaleTimeString();
+		},
+		getDateTimeString(value) {
+			// return new Date(`0001-01-01T${value < 10 ? `0${value}` : value }:00:00`).toLocaleTimeString();
+
 			let hours = parseInt(value / 60);
 			let mins = value % 60;
 			let hoursStrPart = hours < 10 ? `0${hours}` : hours;
 			let minsStrPart = mins < 10 ? `0${mins}` : mins;
-			return new Date(
-				`0001-01-01T${hoursStrPart}:${minsStrPart}:00`
-			).toLocaleTimeString();
+			return `0001-01-01T${hoursStrPart}:${minsStrPart}:00`;
 		},
 		mergeFormatString(value1, value2) {
 			return `${this.getTimeString(value1)} - ${this.getTimeString(
 				value2
 			)}`;
 		},
+		save(id) {
+			this.$root.$emit("save" + id);
+		},
+
+		async createFlight() {
+			this.$root.$emit("create");
+			console.log("emitted");
+			await this.getFiltered();
+		},
+
+		async getFiltered(initiator) {
+			let query = ``;
+			query += this.fromCity ? `From=${this.fromCity}` : ``;
+			query += this.toCity ? `&To=${this.toCity}` : ``;
+			console.log(`departureDate`, this.departureDate);
+			if (this.departureDate) {
+				let from = this.replaceDatePart(
+					this.getDateTimeString(this.rangeDeprtureValue[0]),
+					this.departureDate
+				);
+				console.log('from', from);
+				let until = this.replaceDatePart(
+					this.getDateTimeString(this.rangeDeprtureValue[1]),
+					this.departureDate
+				);
+				console.log('until', until);
+				query += `&DepartureTimeFrom=${from}`;
+				query += `&DepartureTimeUntil=${until}`;
+			}
+			if (query !== "" || initiator === "create") {
+				try {
+					let response = await this.$http.get(
+						`/api/flights/filter?${query}`
+					);
+					this.flights = response.data.data;
+				} catch (error) {
+					window.console.error(error);
+				}
+			}
+		},
+		replaceTimePart(date, replacement) {
+			return (
+				date.substr(0, 11) +
+				replacement +
+				date.substr(11 + replacement.length)
+			);
+		},
+		replaceDatePart(date, replacement) {
+			console.log("date", date);
+			console.log("replacement", replacement);
+			return "" + replacement + date.substr(replacement.length);
+		},
+	},
+	watch: {
+		fromCity: async function () {
+			await this.getFiltered();
+		},
+		toCity: async function () {
+			await this.getFiltered();
+		},
+		departureDate: async function () {
+			// console.log(value);
+			// let from = this.replaceDatePart(
+			// 	this.getDateTimeString(this.rangeDeprtureValue[0]),
+			// 	this.departureDate
+			// );
+			// let until = this.replaceDatePart(
+			// 	this.getDateTimeString(this.rangeDeprtureValue[1]),
+			// 	this.departureDate
+			// );
+			// console.log("from", from);
+			// console.log("until", until);
+			await this.getFiltered();
+		},
+		// rangeDeprtureValue: async function () {
+		// 	await this.getFiltered();
+		// },
 	},
 	async created() {
 		await this.getCities();
-		await this.getFlights();
+		// await this.getFlights();
+		await this.getFiltered();
+		this.totalRows = this.flights.length;
+		console.log(this.roles);
+		let vm = this;
+		this.$root.$on("refresh-flights", async function (reason) {
+			await vm.getFiltered(reason);
+		});
 	},
 };
 </script>
